@@ -6,6 +6,7 @@ import os
 import shutil
 import json
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 
 try:
@@ -30,7 +31,7 @@ def send_line_notification(file_name):
         user_id = st.secrets.get("LINE_USER_ID")
 
         if not token or not user_id:
-            return
+            return False, "ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN หรือ LINE_USER_ID ใน Streamlit Secrets"
 
         bkk_tz = timezone(timedelta(hours=7))
         now_str = datetime.now(bkk_tz).strftime("%d/%m/%Y %H:%M:%S")
@@ -57,9 +58,12 @@ def send_line_notification(file_name):
             headers=headers
         )
         with urllib.request.urlopen(req, timeout=10) as res:
-            pass
+            return True, "ส่งข้อความสำเร็จ"
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        return False, f"LINE API HTTP {e.code}: {err_body}"
     except Exception as e:
-        print(f"LINE Notification Error: {e}")
+        return False, f"Error: {e}"
 
 def get_libreoffice_cmd():
     for cmd in ["libreoffice", "soffice", "/Applications/LibreOffice.app/Contents/MacOS/soffice"]:
@@ -186,10 +190,16 @@ if uploaded_file is not None:
         try:
             pdf1, pdf2, pdf_comb = process_and_convert(uploaded_file)
             
-            # ส่งการแจ้งเตือนเข้า LINE (ถ้ามีการตั้งค่า Secrets ไว้)
-            send_line_notification(uploaded_file.name)
+            # ส่งการแจ้งเตือนเข้า LINE
+            line_ok, line_msg = send_line_notification(uploaded_file.name)
             
             st.success("✅ สร้างไฟล์ PDF สำเร็จเรียบร้อยแล้ว!")
+            
+            # แสดงสถานะ LINE เพื่อให้ตรวจสอบได้ง่าย
+            if line_ok:
+                st.toast("📲 ส่งแจ้งเตือนเข้า LINE เรียบร้อยแล้ว!", icon="✅")
+            else:
+                st.info(f"ℹ️ สถานะ LINE แจ้งเตือน: {line_msg}")
 
             st.write("---")
             st.subheader("เลือกลิงก์ดาวน์โหลดไฟล์:")
