@@ -4,6 +4,9 @@ import subprocess
 import tempfile
 import os
 import shutil
+import json
+import urllib.request
+from datetime import datetime, timezone, timedelta
 
 try:
     from pypdf import PdfMerger
@@ -19,6 +22,44 @@ st.set_page_config(
 
 st.title("📄 ระบบแปลงรายงาน Excel เป็น PDF")
 st.markdown("อัปโหลดไฟล์ **Excel (.xlsx)** เพื่อรับไฟล์ **PDF** ที่จัดหน้าและตัดเฉพาะข้อมูลส่วนที่จำเป็นให้อัตโนมัติ")
+
+def send_line_notification(file_name):
+    """ส่งข้อความแจ้งเตือนเข้า LINE เมื่อมีการแปลงไฟล์สำเร็จ"""
+    try:
+        token = st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN")
+        user_id = st.secrets.get("LINE_USER_ID")
+
+        if not token or not user_id:
+            return
+
+        bkk_tz = timezone(timedelta(hours=7))
+        now_str = datetime.now(bkk_tz).strftime("%d/%m/%Y %H:%M:%S")
+
+        msg = (
+            "📄 มีการแปลงไฟล์ Excel เป็น PDF สำเร็จ!\n\n"
+            f"📁 ไฟล์: {file_name}\n"
+            f"⏰ เวลา: {now_str}"
+        )
+
+        url = "https://api.line.me/v2/bot/message/push"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+        payload = {
+            "to": user_id,
+            "messages": [{"type": "text", "text": msg}]
+        }
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers
+        )
+        with urllib.request.urlopen(req, timeout=10) as res:
+            pass
+    except Exception as e:
+        print(f"LINE Notification Error: {e}")
 
 def get_libreoffice_cmd():
     for cmd in ["libreoffice", "soffice", "/Applications/LibreOffice.app/Contents/MacOS/soffice"]:
@@ -144,6 +185,10 @@ if uploaded_file is not None:
     with st.spinner("กำลังประมวลผลและสร้างไฟล์ PDF กรุณารอสักครู่..."):
         try:
             pdf1, pdf2, pdf_comb = process_and_convert(uploaded_file)
+            
+            # ส่งการแจ้งเตือนเข้า LINE (ถ้ามีการตั้งค่า Secrets ไว้)
+            send_line_notification(uploaded_file.name)
+            
             st.success("✅ สร้างไฟล์ PDF สำเร็จเรียบร้อยแล้ว!")
 
             st.write("---")
